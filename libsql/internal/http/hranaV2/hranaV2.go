@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/tursodatabase/libsql-client-go/libsql/internal/hrana"
 	"github.com/tursodatabase/libsql-client-go/libsql/internal/http/shared"
 )
@@ -163,6 +164,7 @@ func (h *hranaV2Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (drive
 
 func (h *hranaV2Conn) sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, streamClose bool) (*hrana.PipelineResponse, error) {
 	if h.streamClosed {
+		logrus.Tracef("stream is closed")
 		// If the stream is closed, we can't send any more requests using this connection.
 		return nil, fmt.Errorf("stream is closed: %w", driver.ErrBadConn)
 	}
@@ -177,6 +179,7 @@ func (h *hranaV2Conn) sendPipelineRequest(ctx context.Context, msg *hrana.Pipeli
 		h.streamClosed = true
 	}
 	if err != nil {
+		logrus.Tracef("failed to send pipeline request: %+v\n%s", msg, err)
 		return nil, err
 	}
 	h.baton = result.Baton
@@ -232,16 +235,19 @@ func getReplicationIndex(response *hrana.PipelineResponse) uint64 {
 func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url string, jwt string, host string) (result hrana.PipelineResponse, streamClosed bool, err error) {
 	reqBody, err := json.Marshal(msg)
 	if err != nil {
+		logrus.Tracef("failed to marshal request: %+v\n%s", msg, err)
 		return hrana.PipelineResponse{}, false, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	pipelineURL, err := net_url.JoinPath(url, "/v2/pipeline")
 	if err != nil {
+		logrus.Tracef("failed to join URL: %s\n%s", url, err)
 		return hrana.PipelineResponse{}, false, err
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", pipelineURL, bytes.NewReader(reqBody))
 	if err != nil {
+		logrus.Tracef("failed to create request: %s\n%s", string(reqBody), err)
 		return hrana.PipelineResponse{}, false, err
 	}
 	if len(jwt) > 0 {
@@ -251,6 +257,7 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 	req.Host = host
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		logrus.Tracef("failed to send request: %s\n%s", string(reqBody), err)
 		return hrana.PipelineResponse{}, false, err
 	}
 	defer resp.Body.Close()
@@ -263,7 +270,9 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 		var serverError struct {
 			Error string `json:"error"`
 		}
+		logrus.Tracef("error response: %s", string(body))
 		if err := json.Unmarshal(body, &serverError); err == nil {
+			logrus.Tracef("could not unmarshal error: %s", string(body))
 			return hrana.PipelineResponse{}, true, fmt.Errorf("error code %d: %s", resp.StatusCode, serverError.Error)
 		}
 		var errResponse hrana.Error
@@ -280,6 +289,7 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 		return hrana.PipelineResponse{}, true, fmt.Errorf("error code %d: %s", resp.StatusCode, string(body))
 	}
 	if err = json.Unmarshal(body, &result); err != nil {
+		logrus.Tracef("failed to unmarshal response: %s\n%s", string(body), err)
 		return hrana.PipelineResponse{}, false, err
 	}
 	return result, false, nil
