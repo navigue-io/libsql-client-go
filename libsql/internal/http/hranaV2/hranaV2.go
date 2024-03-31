@@ -177,7 +177,6 @@ func (h *hranaV2Conn) sendPipelineRequest(ctx context.Context, msg *hrana.Pipeli
 		h.streamClosed = true
 	}
 	if err != nil {
-		err = fmt.Errorf("failed to send pipeline request: %+v\n%s", msg, err)
 		return nil, err
 	}
 	h.baton = result.Baton
@@ -319,7 +318,7 @@ func (h *hranaV2Conn) executeStmt(ctx context.Context, query string, args []driv
 	result, err := h.sendPipelineRequest(ctx, msg, false)
 	if err != nil {
 		// err = fmt.Errorf("4, failed to send pipeline request: %s\n%s", query, err)
-		return nil, fmt.Errorf("4, failed to execute SQL: %s\n%w", query, err)
+		return nil, fmt.Errorf("4, failed to execute SQL: %w", err)
 	}
 
 	if result.Results[0].Error != nil {
