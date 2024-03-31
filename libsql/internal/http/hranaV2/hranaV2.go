@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/tursodatabase/libsql-client-go/libsql/internal/hrana"
 	"github.com/tursodatabase/libsql-client-go/libsql/internal/http/shared"
 )
@@ -288,33 +289,39 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 func (h *hranaV2Conn) executeStmt(ctx context.Context, query string, args []driver.NamedValue, wantRows bool) (*hrana.PipelineResponse, error) {
 	stmts, params, err := shared.ParseStatementAndArgs(query, args)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute SQL: %s\n%w", query, err)
+		logrus.Tracef("1, failed to parse statement and args: %s\n%s", query, err)
+		return nil, fmt.Errorf("1, failed to execute SQL: %s\n%w", query, err)
 	}
 	msg := &hrana.PipelineRequest{}
 	if len(stmts) == 1 {
 		executeStream, err := hrana.ExecuteStream(stmts[0], params[0], wantRows)
 		if err != nil {
-			return nil, fmt.Errorf("failed to execute SQL: %s\n%w", query, err)
+			logrus.Tracef("2, failed to create execute stream: %s\n%s", query, err)
+			return nil, fmt.Errorf("2, failed to execute SQL: %s\n%w", query, err)
 		}
 		msg.Add(*executeStream)
 	} else {
 		batchStream, err := hrana.BatchStream(stmts, params, wantRows)
 		if err != nil {
-			return nil, fmt.Errorf("failed to execute SQL: %s\n%w", query, err)
+			logrus.Tracef("3, failed to create batch stream: %s\n%s", query, err)
+			return nil, fmt.Errorf("3, failed to execute SQL: %s\n%w", query, err)
 		}
 		msg.Add(*batchStream)
 	}
 
 	result, err := h.sendPipelineRequest(ctx, msg, false)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute SQL: %s\n%w", query, err)
+		logrus.Tracef("4, failed to send pipeline request: %s\n%s", query, err)
+		return nil, fmt.Errorf("4, failed to execute SQL: %s\n%w", query, err)
 	}
 
 	if result.Results[0].Error != nil {
-		return nil, fmt.Errorf("failed to execute SQL: %s\n%s", query, result.Results[0].Error.Message)
+		logrus.Tracef("5, failed to execute SQL: %s\n%s", query, result.Results[0].Error.Message)
+		return nil, fmt.Errorf("5, failed to execute SQL: %s\n%s", query, result.Results[0].Error.Message)
 	}
 	if result.Results[0].Response == nil {
-		return nil, fmt.Errorf("failed to execute SQL: %s\n%s", query, "no response received")
+		logrus.Tracef("6, failed to execute SQL: %s\n%s", query, "no response received")
+		return nil, fmt.Errorf("6, failed to execute SQL: %s\n%s", query, "no response received")
 	}
 	return result, nil
 }
