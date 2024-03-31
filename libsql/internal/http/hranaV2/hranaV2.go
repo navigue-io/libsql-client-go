@@ -256,7 +256,7 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 	if err != nil {
 		fmt.Printf("failed to send request: %s\n", string(reqBody))
 		if len(msg.Requests) != 0 {
-			fmt.Printf("failed sql: %+v\n", msg.Requests[0].Stmt.Sql)
+			fmt.Printf("failed sql: %+v\n", *msg.Requests[0].Stmt.Sql)
 		}
 		fmt.Printf("error: %s\n", err)
 		err = fmt.Errorf("failed to send request: %s\n%s", string(reqBody), err)
