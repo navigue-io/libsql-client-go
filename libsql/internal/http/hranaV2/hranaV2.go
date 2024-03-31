@@ -164,7 +164,7 @@ func (h *hranaV2Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (drive
 
 func (h *hranaV2Conn) sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, streamClose bool) (*hrana.PipelineResponse, error) {
 	if h.streamClosed {
-		logrus.Tracef("stream is closed")
+		err = fmt.Errorf("stream is closed")
 		// If the stream is closed, we can't send any more requests using this connection.
 		return nil, fmt.Errorf("stream is closed: %w", driver.ErrBadConn)
 	}
@@ -179,7 +179,7 @@ func (h *hranaV2Conn) sendPipelineRequest(ctx context.Context, msg *hrana.Pipeli
 		h.streamClosed = true
 	}
 	if err != nil {
-		logrus.Tracef("failed to send pipeline request: %+v\n%s", msg, err)
+		err = fmt.Errorf("failed to send pipeline request: %+v\n%s", msg, err)
 		return nil, err
 	}
 	h.baton = result.Baton
@@ -235,19 +235,19 @@ func getReplicationIndex(response *hrana.PipelineResponse) uint64 {
 func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url string, jwt string, host string) (result hrana.PipelineResponse, streamClosed bool, err error) {
 	reqBody, err := json.Marshal(msg)
 	if err != nil {
-		logrus.Tracef("failed to marshal request: %+v\n%s", msg, err)
+		err = fmt.Errorf("failed to marshal request: %+v\n%s", msg, err)
 		return hrana.PipelineResponse{}, false, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	pipelineURL, err := net_url.JoinPath(url, "/v2/pipeline")
 	if err != nil {
-		logrus.Tracef("failed to join URL: %s\n%s", url, err)
+		err = fmt.Errorf("failed to join URL: %s\n%s", url, err)
 		return hrana.PipelineResponse{}, false, err
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", pipelineURL, bytes.NewReader(reqBody))
 	if err != nil {
-		logrus.Tracef("failed to create request: %s\n%s", string(reqBody), err)
+		err = fmt.Errorf("failed to create request: %s\n%s", string(reqBody), err)
 		return hrana.PipelineResponse{}, false, err
 	}
 	if len(jwt) > 0 {
@@ -257,7 +257,7 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 	req.Host = host
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		logrus.Tracef("failed to send request: %s\n%s", string(reqBody), err)
+		err = fmt.Errorf("failed to send request: %s\n%s", string(reqBody), err)
 		return hrana.PipelineResponse{}, false, err
 	}
 	defer resp.Body.Close()
@@ -270,9 +270,9 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 		var serverError struct {
 			Error string `json:"error"`
 		}
-		logrus.Tracef("error response: %s", string(body))
+		err = fmt.Errorf("error response: %s", string(body))
 		if err := json.Unmarshal(body, &serverError); err == nil {
-			logrus.Tracef("could not unmarshal error: %s", string(body))
+			err = fmt.Errorf("could not unmarshal error: %s", string(body))
 			return hrana.PipelineResponse{}, true, fmt.Errorf("error code %d: %s", resp.StatusCode, serverError.Error)
 		}
 		var errResponse hrana.Error
@@ -289,7 +289,7 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 		return hrana.PipelineResponse{}, true, fmt.Errorf("error code %d: %s", resp.StatusCode, string(body))
 	}
 	if err = json.Unmarshal(body, &result); err != nil {
-		logrus.Tracef("failed to unmarshal response: %s\n%s", string(body), err)
+		err = fmt.Errorf("failed to unmarshal response: %s\n%s", string(body), err)
 		return hrana.PipelineResponse{}, false, err
 	}
 	return result, false, nil
@@ -298,21 +298,21 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 func (h *hranaV2Conn) executeStmt(ctx context.Context, query string, args []driver.NamedValue, wantRows bool) (*hrana.PipelineResponse, error) {
 	stmts, params, err := shared.ParseStatementAndArgs(query, args)
 	if err != nil {
-		// logrus.Tracef("1, failed to parse statement and args: %s\n%s", query, err)
+		// err = fmt.Errorf("1, failed to parse statement and args: %s\n%s", query, err)
 		return nil, fmt.Errorf("1, failed to execute SQL: %s\n%w", query, err)
 	}
 	msg := &hrana.PipelineRequest{}
 	if len(stmts) == 1 {
 		executeStream, err := hrana.ExecuteStream(stmts[0], params[0], wantRows)
 		if err != nil {
-			// logrus.Tracef("2, failed to create execute stream: %s\n%s", query, err)
+			// err = fmt.Errorf("2, failed to create execute stream: %s\n%s", query, err)
 			return nil, fmt.Errorf("2, failed to execute SQL: %s\n%w", query, err)
 		}
 		msg.Add(*executeStream)
 	} else {
 		batchStream, err := hrana.BatchStream(stmts, params, wantRows)
 		if err != nil {
-			// logrus.Tracef("3, failed to create batch stream: %s\n%s", query, err)
+			// err = fmt.Errorf("3, failed to create batch stream: %s\n%s", query, err)
 			return nil, fmt.Errorf("3, failed to execute SQL: %s\n%w", query, err)
 		}
 		msg.Add(*batchStream)
@@ -320,16 +320,16 @@ func (h *hranaV2Conn) executeStmt(ctx context.Context, query string, args []driv
 
 	result, err := h.sendPipelineRequest(ctx, msg, false)
 	if err != nil {
-		// logrus.Tracef("4, failed to send pipeline request: %s\n%s", query, err)
+		// err = fmt.Errorf("4, failed to send pipeline request: %s\n%s", query, err)
 		return nil, fmt.Errorf("4, failed to execute SQL: %s\n%w", query, err)
 	}
 
 	if result.Results[0].Error != nil {
-		// logrus.Tracef("5, failed to execute SQL: %s\n%s", query, result.Results[0].Error.Message)
+		// err = fmt.Errorf("5, failed to execute SQL: %s\n%s", query, result.Results[0].Error.Message)
 		return nil, fmt.Errorf("5, failed to execute SQL: %s\n%s", query, result.Results[0].Error.Message)
 	}
 	if result.Results[0].Response == nil {
-		// logrus.Tracef("6, failed to execute SQL: %s\n%s", query, "no response received")
+		// err = fmt.Errorf("6, failed to execute SQL: %s\n%s", query, "no response received")
 		return nil, fmt.Errorf("6, failed to execute SQL: %s\n%s", query, "no response received")
 	}
 	return result, nil
