@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/tursodatabase/libsql-client-go/libsql/internal/hrana"
 	"github.com/tursodatabase/libsql-client-go/libsql/internal/http/shared"
 )
@@ -164,7 +163,6 @@ func (h *hranaV2Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (drive
 
 func (h *hranaV2Conn) sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, streamClose bool) (*hrana.PipelineResponse, error) {
 	if h.streamClosed {
-		err = fmt.Errorf("stream is closed")
 		// If the stream is closed, we can't send any more requests using this connection.
 		return nil, fmt.Errorf("stream is closed: %w", driver.ErrBadConn)
 	}
