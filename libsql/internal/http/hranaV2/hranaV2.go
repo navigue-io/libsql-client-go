@@ -242,6 +242,7 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 		err = fmt.Errorf("failed to join URL: %s\n%s", url, err)
 		return hrana.PipelineResponse{}, false, err
 	}
+	fmt.Printf("failed to send request: %s\n", string(reqBody))
 	req, err := http.NewRequestWithContext(ctx, "POST", pipelineURL, bytes.NewReader(reqBody))
 	if err != nil {
 		err = fmt.Errorf("failed to create request: %s\n%s", string(reqBody), err)
