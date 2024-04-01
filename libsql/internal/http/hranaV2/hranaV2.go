@@ -235,6 +235,7 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 		err = fmt.Errorf("failed to marshal request: %+v\n%s", msg, err)
 		return hrana.PipelineResponse{}, false, err
 	}
+	ctx = context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	pipelineURL, err := net_url.JoinPath(url, "/v2/pipeline")
@@ -255,11 +256,8 @@ func sendPipelineRequest(ctx context.Context, msg *hrana.PipelineRequest, url st
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fmt.Printf("failed to send request: %s\n", string(reqBody))
-		if len(msg.Requests) != 0 {
-			fmt.Printf("failed sql args: %+v\n", msg.Requests[0].Stmt.Args)
-			fmt.Printf("failed sql named args: %+v\n", msg.Requests[0].Stmt.NamedArgs)
-		}
 		fmt.Printf("error: %s\n", err)
+		fmt.Printf("error: %+v\n", resp)
 		err = fmt.Errorf("failed to send request: %s\n%s", string(reqBody), err)
 		return hrana.PipelineResponse{}, false, err
 	}
